@@ -6,12 +6,14 @@
 
 #include <stdio.h>
 #include <inttypes.h>
+#include <thread>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_system.h"
+#include "sensors/mpu6050.h"
 
 extern "C" void app_main(void)
 {
@@ -42,11 +44,32 @@ extern "C" void app_main(void)
 
     printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
 
-    for (int i = 10; i >= 0; i--) {
-        printf("Restarting in %d seconds...\n", i);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    i2c::I2CBusMaster bus(i2c::SDAType(gpio_num_t(10)), i2c::SCLType(gpio_num_t(11)));
+    auto r = bus.Open();
+    if (!r)
+    {
+        FMT_PRINTLN("i2c bus master error: {}", r.error());
+        return;
     }
-    printf("Restarting now.\n");
-    fflush(stdout);
-    esp_restart();
+
+    MPU6050 mpu6050 = *MPU6050::Open(bus);
+    FMT_PRINTLN("MPU6050: Id={}", mpu6050.GetId());
+    mpu6050.SetPwrMgmt2({.stby_zg = 1, .stby_yg = 1, .stby_xg = 1});
+    mpu6050.SetPwrMgmt({.temp_dis = 1, .cycle = 1, .sleep = 0});
+    while(true)
+    {
+        FMT_PRINTLN("MPU6050:Accel X={}; Y={}; Z={}", mpu6050.GetAccelXRaw(), mpu6050.GetAccelYRaw(), mpu6050.GetAccelZRaw());
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    return;
+
+
+    //for (int i = 10; i >= 0; i--) {
+    //    printf("Restarting in %d seconds...\n", i);
+    //    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    //}
+    //printf("Restarting now.\n");
+    //fflush(stdout);
+    //esp_restart();
 }
