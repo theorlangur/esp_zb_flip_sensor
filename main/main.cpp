@@ -58,7 +58,7 @@ extern "C" void app_main(void)
     mpu6050.SetPwrMgmt({.temp_dis = 1, .cycle = 1, .sleep = 0});
     while(true)
     {
-        FMT_PRINTLN("MPU6050:Accel X={}; Y={}; Z={}", mpu6050.GetAccelXRaw(), mpu6050.GetAccelYRaw(), mpu6050.GetAccelZRaw());
+        FMT_PRINTLN("MPU6050:Accel X={}; Y={}; Z={}", mpu6050.GetAccelX(), mpu6050.GetAccelY(), mpu6050.GetAccelZ());
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     std::this_thread::sleep_for(std::chrono::seconds(5));
