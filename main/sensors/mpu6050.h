@@ -32,6 +32,9 @@ public:
         SetAccelRange,
         SetGyroRange,
         ConfigFIFO,
+        WriteMem,
+        ReadMem,
+        InitDMP,
     };
     static const char* err_to_str(ErrorCode e);
 
@@ -215,11 +218,16 @@ public:
 
     ExpectedResult Start();
     ExpectedResult Sleep();
+
+    ExpectedResult InitDMP();
 private:
     MPU6050(i2c::I2CDevice &&d);
 
     float GetAccelFromRaw(int16_t v) const;
     float GetGyroFromRaw(int16_t v) const;
+
+    ExpectedResult WriteMem(uint16_t mem_addr, uint16_t length, uint8_t *data);
+    ExpectedResult ReadMem(uint16_t mem_addr, uint16_t length, uint8_t *data);
 
     enum class Reg: uint8_t
     {
@@ -293,11 +301,16 @@ private:
     using reg_dmp_cfg1                = i2c::helpers::Register<uint8_t, Reg::DMPCfg1, i2c::helpers::RegAccess::RW>;
     using reg_dmp_cfg2                = i2c::helpers::Register<uint8_t, Reg::DMPCfg2, i2c::helpers::RegAccess::RW>;
 
+    using reg_dmp_addr                = i2c::helpers::RegisterMultiByte<uint16_t, Reg::BankSel, i2c::helpers::RegAccess::Write, i2c::helpers::ByteOrder::BE>;
+
+    using reg_prog_addr               = i2c::helpers::RegisterMultiByte<uint16_t, Reg::DMPCfg1, i2c::helpers::RegAccess::RW, i2c::helpers::ByteOrder::BE>;
+
     i2c::I2CDevice m_Device;
     struct {
         AccelFullScaleRange accel_range : 2 = AccelFullScaleRange::_2_g;
         GyroFullScaleRange  gyro_range  : 2 = GyroFullScaleRange::_250_deg_per_sec;
-        uint8_t             unused      : 4 = 0;
+        uint8_t             dmp_loaded  : 1 = 0;
+        uint8_t             unused      : 3 = 0;
     } m_State;
 };
 

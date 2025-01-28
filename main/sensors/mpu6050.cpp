@@ -1,6 +1,11 @@
 #include "mpu6050.h"
 #include <thread>
 
+namespace dmp_internals
+{
+#include "mpu6050_dmp.ixx"
+}
+
 const char* MPU6050::err_to_str(ErrorCode e)
 {
     switch(e)
@@ -28,6 +33,9 @@ const char* MPU6050::err_to_str(ErrorCode e)
         case ErrorCode::SetAccelRange: return "SetAccelRange";
         case ErrorCode::SetGyroRange: return "SetGyroRange";
         case ErrorCode::ConfigFIFO: return "ConfigFIFO";
+        case ErrorCode::WriteMem: return "WriteMem";
+        case ErrorCode::ReadMem: return "ReadMem";
+        case ErrorCode::InitDMP: return "InitDMP";
     }
 }
 
@@ -272,4 +280,50 @@ MPU6050::ExpectedResult MPU6050::Start()
 MPU6050::ExpectedResult MPU6050::Sleep()
 {
     return SetPwrMgmt({.cycle = false, .sleep = true});
+}
+
+MPU6050::ExpectedResult MPU6050::WriteMem(uint16_t mem_addr, uint16_t length, uint8_t *data)
+{
+    return reg_dmp_addr{m_Device}
+        .Write(mem_addr)
+        .and_then([&]{ return m_Device.WriteRegMulti(uint8_t(Reg::MemRW), {data, length}, i2c::helpers::kTimeout); })
+        .transform([&](i2c::I2CDevice &d){ return std::ref(*this); })
+        .transform_error([&](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::WriteMem}; });
+}
+
+MPU6050::ExpectedResult MPU6050::ReadMem(uint16_t mem_addr, uint16_t length, uint8_t *data)
+{
+    return reg_dmp_addr{m_Device}
+        .Write(mem_addr)
+        .and_then([&]{ return m_Device.ReadRegMulti(uint8_t(Reg::MemRW), {data, length}, i2c::helpers::kTimeout); })
+        .transform([&](i2c::I2CDevice &d){ return std::ref(*this); })
+        .transform_error([&](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::ReadMem}; });
+}
+
+MPU6050::ExpectedResult MPU6050::InitDMP()
+{
+    constexpr uint16_t LOAD_CHUNK = 16;
+    uint8_t cur[LOAD_CHUNK];
+    if (m_State.dmp_loaded)
+        return std::unexpected(Err{.i2cErr = {}, .code = ErrorCode::InitDMP});
+
+    m_State.dmp_loaded = true;
+    uint16_t this_write;
+    for (uint16_t ii = 0; ii < dmp_internals::code_size; ii += this_write) {
+        this_write = std::min(LOAD_CHUNK, uint16_t(dmp_internals::code_size - ii));
+        //write
+        if (auto r = WriteMem(ii, this_write, (uint8_t*)&dmp_internals::dmp_memory[ii]); !r)
+            return std::unexpected(Err{.i2cErr = r.error().i2cErr, .code = ErrorCode::InitDMP});
+
+        //verify
+        if (auto r = ReadMem(ii, this_write, cur); !r)
+            return std::unexpected(Err{.i2cErr = r.error().i2cErr, .code = ErrorCode::InitDMP});
+        if (memcmp(dmp_internals::dmp_memory+ii, cur, this_write))
+            return std::unexpected(Err{.i2cErr = {}, .code = ErrorCode::InitDMP});
+    }
+
+    return reg_prog_addr{m_Device}
+                .Write(dmp_internals::sStartAddress)
+                .transform([&]{ return std::ref(*this); })
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::InitDMP}; });
 }
