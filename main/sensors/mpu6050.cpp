@@ -36,6 +36,12 @@ const char* MPU6050::err_to_str(ErrorCode e)
         case ErrorCode::WriteMem: return "WriteMem";
         case ErrorCode::ReadMem: return "ReadMem";
         case ErrorCode::InitDMP: return "InitDMP";
+        case ErrorCode::GetAllMeasurements: return "GetAllMeasurements";
+        case ErrorCode::GetAllMeasurementsRaw: return "GetAllMeasurementsRaw";
+        case ErrorCode::GetAccel: return "GetAccel";
+        case ErrorCode::GetAccelRaw: return "GetAccelRaw";
+        case ErrorCode::GetGyro: return "GetGyro";
+        case ErrorCode::GetGyroRaw: return "GetGyroRaw";
     }
 }
 
@@ -152,6 +158,11 @@ float MPU6050::GetGyroFromRaw(int16_t v) const
         case GyroFullScaleRange::_1000_deg_per_sec: return float(1000) * v / std::numeric_limits<int16_t>::max();
         case GyroFullScaleRange::_2000_deg_per_sec: return float(2000) * v / std::numeric_limits<int16_t>::max();
     }
+}
+
+float MPU6050::GetTempFromRaw(int16_t v) const
+{
+    return float(v) / 340 + 36.53f;
 }
 
 MPU6050::ExpectedValue<float> MPU6050::GetAccelX()
@@ -326,4 +337,54 @@ MPU6050::ExpectedResult MPU6050::InitDMP()
                 .Write(dmp_internals::sStartAddress)
                 .transform([&]{ return std::ref(*this); })
                 .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::InitDMP}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::AccelRaw> MPU6050::GetAccelRaw()
+{
+    AccelRaw v;
+    return reg_accel{m_Device}
+            .Read(v)
+            .transform([&]{ return v; })
+            .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::GetAccelRaw}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::Accel> MPU6050::GetAccel()
+{
+    return GetAccelRaw()
+        .transform([this](const AccelRaw& v){  return Accel{.x = GetAccelFromRaw(v.x), .y=GetAccelFromRaw(v.y), .z = GetAccelFromRaw(v.z)};  });
+}
+
+MPU6050::ExpectedValue<MPU6050::GyroRaw> MPU6050::GetGyroRaw()
+{
+    GyroRaw v;
+    return reg_gyro{m_Device}
+            .Read(v)
+            .transform([&]{ return v; })
+            .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::GetGyroRaw}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::Gyro> MPU6050::GetGyro()
+{
+    return GetGyroRaw()
+        .transform([this](const GyroRaw& v){  return Gyro{.x = GetGyroFromRaw(v.x), .y=GetGyroFromRaw(v.y), .z = GetGyroFromRaw(v.z)};  });
+}
+
+MPU6050::ExpectedValue<MPU6050::AllRaw> MPU6050::GetAllRaw()
+{
+    AllRaw v;
+    return reg_all_measurements{m_Device}
+            .Read(v)
+            .transform([&]{ return v; })
+            .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::GetAllMeasurementsRaw}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::AllMeasurements> MPU6050::GetAllMeasurements()
+{
+    return GetAllRaw()
+        .transform([this](const AllRaw& v){  
+                return AllMeasurements{
+                    .accel = {.x = GetAccelFromRaw(v.accel.x), .y=GetAccelFromRaw(v.accel.y), .z = GetAccelFromRaw(v.accel.z)},  
+                    .temp = GetTempFromRaw(v.temp),
+                    .gyro = {.x = GetGyroFromRaw(v.gyro.x), .y=GetGyroFromRaw(v.gyro.y), .z = GetGyroFromRaw(v.gyro.z)}};  
+        });
 }

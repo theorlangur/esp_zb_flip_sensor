@@ -15,10 +15,16 @@ public:
         GetAccelXRaw,
         GetAccelYRaw,
         GetAccelZRaw,
+        GetAllMeasurements,
+        GetAllMeasurementsRaw,
+        GetAccel,
+        GetAccelRaw,
         GetAccelX,
         GetAccelY,
         GetAccelZ,
         GetTemp,
+        GetGyro,
+        GetGyroRaw,
         GetGyroXRaw,
         GetGyroYRaw,
         GetGyroZRaw,
@@ -203,6 +209,51 @@ public:
     ExpectedValue<float> GetGyroY();
     ExpectedValue<float> GetGyroZ();
 
+    struct AccelRaw
+    {
+        int16_t x;
+        int16_t y;
+        int16_t z;
+    };
+    struct Accel
+    {
+        float x;
+        float y;
+        float z;
+    };
+    ExpectedValue<AccelRaw> GetAccelRaw();
+    ExpectedValue<Accel> GetAccel();
+
+    struct GyroRaw
+    {
+        int16_t x;
+        int16_t y;
+        int16_t z;
+    };
+    struct Gyro
+    {
+        float x;
+        float y;
+        float z;
+    };
+    ExpectedValue<GyroRaw> GetGyroRaw();
+    ExpectedValue<Gyro> GetGyro();
+
+    struct AllRaw
+    {
+        AccelRaw accel;
+        int16_t temp;
+        GyroRaw gyro;
+    };
+    struct AllMeasurements
+    {
+        Accel accel;
+        float temp;
+        Gyro gyro;
+    };
+    ExpectedValue<AllRaw> GetAllRaw();
+    ExpectedValue<AllMeasurements> GetAllMeasurements();
+
     ExpectedValue<PwrMgmt> GetPwrMgmt();
     ExpectedResult SetPwrMgmt(PwrMgmt v);
 
@@ -225,6 +276,7 @@ private:
 
     float GetAccelFromRaw(int16_t v) const;
     float GetGyroFromRaw(int16_t v) const;
+    float GetTempFromRaw(int16_t v) const;
 
     ExpectedResult WriteMem(uint16_t mem_addr, uint16_t length, uint8_t *data);
     ExpectedResult ReadMem(uint16_t mem_addr, uint16_t length, uint8_t *data);
@@ -265,10 +317,13 @@ private:
     };
 
     using reg_who_am_i                = i2c::helpers::Register<uint8_t, Reg::WhoAmI, i2c::helpers::RegAccess::Read>;
+    using reg_all_measurements        = i2c::helpers::RegisterMultiByte<AllRaw, Reg::AccelXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE, sizeof(int16_t)>;
+    using reg_accel                   = i2c::helpers::RegisterMultiByte<AccelRaw, Reg::AccelXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE, sizeof(int16_t)>;
     using reg_accel_x                 = i2c::helpers::RegisterMultiByte<int16_t, Reg::AccelXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
     using reg_accel_y                 = i2c::helpers::RegisterMultiByte<int16_t, Reg::AccelYOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
     using reg_accel_z                 = i2c::helpers::RegisterMultiByte<int16_t, Reg::AccelZOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
     using reg_temp                    = i2c::helpers::RegisterMultiByte<int16_t, Reg::Temp, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
+    using reg_gyro                    = i2c::helpers::RegisterMultiByte<GyroRaw, Reg::GyroXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE, sizeof(int16_t)>;
     using reg_gyro_x                  = i2c::helpers::RegisterMultiByte<int16_t, Reg::GyroXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
     using reg_gyro_y                  = i2c::helpers::RegisterMultiByte<int16_t, Reg::GyroYOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
     using reg_gyro_z                  = i2c::helpers::RegisterMultiByte<int16_t, Reg::GyroZOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
@@ -334,6 +389,66 @@ struct tools::formatter_t<MPU6050::ExpectedValue<V>>
             return tools::format_to(std::forward<Dest>(dst), "{}" , v.value());
         else
             return tools::format_to(std::forward<Dest>(dst), "Err {}" , v.error());
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::Accel>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::Accel const& v)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "Accel[X:{}; Y:{}; Z:{}]" , v.x, v.y, v.z);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::AccelRaw>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::AccelRaw const& v)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "AccelR[X:{}; Y:{}; Z:{}]" , v.x, v.y, v.z);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::Gyro>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::Gyro const& v)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "Gyro[X:{}; Y:{}; Z:{}]" , v.x, v.y, v.z);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::GyroRaw>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::GyroRaw const& v)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "GyroR[X:{}; Y:{}; Z:{}]" , v.x, v.y, v.z);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::AllMeasurements>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::AllMeasurements const& v)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "All: {}; {}; Temp: {}C" , v.accel, v.gyro, v.temp);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::AllRaw>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::AllRaw const& v)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "AllR: {}; {}; TempR: {}" , v.accel, v.gyro, v.temp);
     }
 };
 
