@@ -54,11 +54,13 @@ extern "C" void app_main(void)
 
     MPU6050 mpu6050 = *MPU6050::Open(bus);
     FMT_PRINTLN("MPU6050: Id={}", mpu6050.GetId());
-    mpu6050.SetPwrMgmt2({.stby_zg = 1, .stby_yg = 1, .stby_xg = 1});
-    mpu6050.SetPwrMgmt({.temp_dis = 1, .cycle = 1, .sleep = 0});
+    mpu6050.SetPwrMgmt({.clksel = MPU6050::ClockSource::PLL_Gyro_X, .temp_dis = 0, .cycle = 0, .sleep = 0});
+    mpu6050.SetPwrMgmt2({.stby_zg = 0, .stby_yg = 0, .stby_xg = 0});
     while(true)
     {
-        FMT_PRINTLN("MPU6050:Accel X={}; Y={}; Z={}", mpu6050.GetAccelX(), mpu6050.GetAccelY(), mpu6050.GetAccelZ());
+        FMT_PRINTLN("MPU6050: {}", mpu6050.GetAllMeasurements());
+        //auto allR = *mpu6050.GetAllRaw();
+        //FMT_PRINTLN("MPU6050(R): {}", allR);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     std::this_thread::sleep_for(std::chrono::seconds(5));
