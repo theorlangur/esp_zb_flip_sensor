@@ -6,6 +6,44 @@ namespace dmp_internals
 #include "mpu6050_dmp.ixx"
 }
 
+struct orientation_t
+{
+    int8_t mtx[9] = {
+    };
+
+    constexpr uint16_t row_to_val(int row_idx) const
+    {
+        uint16_t res = 0;
+        if (int8_t b = mtx[row_idx*3 + 0]; b != 0)
+            res = 0 | ((b < 0) << 2);
+        else if (int8_t b = mtx[row_idx*3 + 1]; b != 0)
+            res = 1 | ((b < 0) << 2);
+        else if (int8_t b = mtx[row_idx*3 + 2]; b != 0)
+            res = 2 | ((b < 0) << 2);
+        else
+            res = 7;
+        return res;
+    }
+
+    constexpr uint16_t to_scalar() const
+    {
+        uint16_t res = 0;
+        res = row_to_val(0);
+        res |= row_to_val(1) << 3;
+        res |= row_to_val(2) << 6;
+        return res;
+    }
+};
+
+constexpr orientation_t g_xyz{
+.mtx={
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1,
+}};
+uint16_t inv_orientation_matrix_to_scalar(const int8_t *mtx);
+
+
 const char* MPU6050::err_to_str(ErrorCode e)
 {
     switch(e)
