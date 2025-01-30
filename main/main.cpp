@@ -56,6 +56,12 @@ extern "C" void app_main(void)
     FMT_PRINTLN("MPU6050: Id={}", mpu6050.GetId());
     mpu6050.SetPwrMgmt({.clksel = MPU6050::ClockSource::PLL_Gyro_X, .temp_dis = 0, .cycle = 0, .sleep = 0});
     mpu6050.SetPwrMgmt2({.stby_zg = 0, .stby_yg = 0, .stby_xg = 0});
+    FMT_PRINTLN("MPU6050: Initializing DMP");
+    if (auto r = mpu6050.InitDMP(); !r)
+    {
+        FMT_PRINTLN("MPU6050 err InitDMP: {}", r.error());
+        return;
+    }
     while(true)
     {
         FMT_PRINTLN("MPU6050: {}", mpu6050.GetAllMeasurements());
