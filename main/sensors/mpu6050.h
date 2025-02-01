@@ -41,6 +41,17 @@ public:
         WriteMem,
         ReadMem,
         InitDMP,
+        DMPSetOrientation,
+        ConfigInterrupts,
+        EnableInterrupts,
+        GetEnableInterrupts,
+        GetInterruptStatus,
+        SignalPathReset,
+        ConfigureMotionDetection,
+        ConfigureZeroMotionDetection,
+        SetMotionControl,
+        GetMotionDetectionStatus,
+        SetUserControl,
     };
     static const char* err_to_str(ErrorCode e);
 
@@ -54,6 +65,71 @@ public:
 
     template<class V>
     using ExpectedValue = std::expected<V, Err>;
+
+    struct orientation_t
+    {
+        enum class scalar_t: uint16_t{};
+        friend uint16_t operator&(scalar_t s, int v) { return uint16_t(s) & v; }
+        friend uint16_t operator>>(scalar_t s, int v) { return uint16_t(s) >> v; }
+        friend uint16_t operator<<(scalar_t s, int v) { return uint16_t(s) << v; }
+        friend uint16_t operator|(scalar_t s, int v) { return uint16_t(s) | v; }
+
+        int8_t mtx[9] = {
+        };
+
+        constexpr uint16_t row_to_val(int row_idx) const
+        {
+            uint16_t res = 0;
+            if (int8_t b = mtx[row_idx*3 + 0]; b != 0)
+                res = 0 | ((b < 0) << 2);
+            else if (int8_t b = mtx[row_idx*3 + 1]; b != 0)
+                res = 1 | ((b < 0) << 2);
+            else if (int8_t b = mtx[row_idx*3 + 2]; b != 0)
+                res = 2 | ((b < 0) << 2);
+            else
+                res = 7;
+            return res;
+        }
+
+        constexpr scalar_t to_scalar() const
+        {
+            uint16_t res = 0;
+            res = row_to_val(0);
+            res |= row_to_val(1) << 3;
+            res |= row_to_val(2) << 6;
+            return scalar_t(res);
+        }
+    };
+
+    enum class DMPFeature: uint16_t
+    {
+        Tap = 0x001,
+        AndroidOrient = 0x002,
+        LowPowerQuaternions = 0x004,
+        Pedometer = 0x008,
+        LowPower6XQuaternions = 0x010,
+        CalibratedGyro = 0x020,
+        SendRawAccel = 0x040,
+        SendRawGyro = 0x080,
+        SendCalibratedGyro = 0x100
+    };
+    friend uint16_t operator|(DMPFeature f1, DMPFeature f2) { return uint16_t(f1) | uint16_t(f2); }
+    friend uint16_t operator|(uint16_t f1, DMPFeature f2)   { return uint16_t(f1) | uint16_t(f2); }
+    friend uint16_t operator|(DMPFeature f1, uint16_t f2)   { return uint16_t(f1) | uint16_t(f2); }
+
+    enum class DMPInterrupt: uint8_t
+    {
+        Gesture = 0x01,
+        Continuous = 0x02
+    };
+
+    enum class Orientation: uint8_t
+    {
+        Portrait         = 0x00,
+        Landscape        = 0x01,
+        ReversePortrait  = 0x02,
+        ReverseLandscape = 0x03,
+    };
 
     enum WakeUpFrequence: uint8_t
     {
@@ -192,6 +268,33 @@ public:
         uint8_t unused        : 1 = 0;
     };
 
+    enum DecrementRate: uint8_t
+    {
+        Reset = 0,
+        _1 = 1,
+        _2 = 2,
+        _4 = 3
+    };
+    struct MotionDetectionControl
+    {
+        DecrementRate motion_counter_decrement_rate    : 2 = DecrementRate::Reset;
+        DecrementRate free_fall_counter_decrement_rate : 2 = DecrementRate::Reset;
+        uint8_t accel_on_delay                         : 2 = 0;//ms
+        uint8_t unused                                 : 2 = 0;
+    };
+
+    struct UserControl
+    {
+        uint8_t signal_path_total_reset : 1 = 0;
+        uint8_t i2c_master_reset        : 1 = 0;
+        uint8_t fifo_reset              : 1 = 0;
+        uint8_t dmp_reset               : 1 = 0;
+        uint8_t always_zero             : 1 = 0;
+        uint8_t i2c_master_enable       : 1 = 0;
+        uint8_t fifo_enable             : 1 = 0;
+        uint8_t dmp_enable              : 1 = 0;
+    };
+
     static ExpectedValue<MPU6050> Open(i2c::I2CBusMaster &bus);
 
     ExpectedValue<uint8_t> GetId();
@@ -271,6 +374,30 @@ public:
     ExpectedResult Sleep();
 
     ExpectedResult InitDMP();
+
+    ExpectedResult DMPSetOrientation(orientation_t::scalar_t orient);
+
+    ExpectedResult ConfigureInterrupts(InterruptPinCfg cfg);
+
+    ExpectedValue<InterruptByte> GetEnabledInterrupts();
+    ExpectedResult EnableInterrupts(InterruptByte b);
+
+    ExpectedValue<InterruptByte> GetInterruptStatus();
+
+    struct signal_path_t
+    {
+        uint8_t temp   : 1 = 1;
+        uint8_t accel  : 1 = 1;
+        uint8_t gyro   : 1 = 1;
+        uint8_t unused : 5 = 0;
+    };
+    ExpectedResult SignalPathReset(signal_path_t p);
+
+    ExpectedResult ConfigureMotionDetection(uint8_t threshold, uint8_t duration, MotionDetectionControl ctrl);
+    ExpectedResult ConfigureZeroMotionDetection(uint8_t threshold, uint8_t duration = 0);
+
+    ExpectedValue<MotionDetectionStatus> GetMotionDetectionStatus();
+    ExpectedResult SetUserCtrl(UserControl v);
 private:
     MPU6050(i2c::I2CDevice &&d);
 
@@ -304,6 +431,9 @@ private:
         GyroYOut              = 0x45,
         GyroZOut              = 0x47,
         MotionDetectionStatus = 0x61,
+        SignalPathReset       = 0x68,
+        MotionDetectionControl= 0x69,
+        UserCtrl              = 0x6A,
         PwrMgmt               = 0x6B,
         PwrMgmt2              = 0x6C,
         BankSel               = 0x6D,
@@ -317,6 +447,7 @@ private:
     };
 
     using reg_who_am_i                = i2c::helpers::Register<uint8_t, Reg::WhoAmI, i2c::helpers::RegAccess::Read>;
+    using reg_signal_path_reset       = i2c::helpers::Register<signal_path_t, Reg::SignalPathReset, i2c::helpers::RegAccess::Write>;
     using reg_all_measurements        = i2c::helpers::RegisterMultiByte<AllRaw, Reg::AccelXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE, sizeof(int16_t)>;
     using reg_accel                   = i2c::helpers::RegisterMultiByte<AccelRaw, Reg::AccelXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE, sizeof(int16_t)>;
     using reg_accel_x                 = i2c::helpers::RegisterMultiByte<int16_t, Reg::AccelXOut, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
@@ -334,6 +465,7 @@ private:
     using reg_fifo_count              = i2c::helpers::RegisterMultiByte<uint16_t, Reg::FIFOCount, i2c::helpers::RegAccess::Read, i2c::helpers::ByteOrder::BE>;
     using reg_fifo_data               = i2c::helpers::Register<uint8_t, Reg::FIFOData, i2c::helpers::RegAccess::RW>;
     using reg_fifo_enable             = i2c::helpers::Register<FIFOEnabled, Reg::FIFOEnabled, i2c::helpers::RegAccess::RW>;
+    using reg_user_ctrl               = i2c::helpers::Register<UserControl, Reg::UserCtrl, i2c::helpers::RegAccess::RW>;
 
     using reg_int_config              = i2c::helpers::Register<InterruptPinCfg, Reg::IntConfig, i2c::helpers::RegAccess::RW>;
     using reg_int_enable              = i2c::helpers::Register<InterruptByte, Reg::IntEnable, i2c::helpers::RegAccess::RW>;
@@ -341,6 +473,7 @@ private:
     using reg_dmp_int_status          = i2c::helpers::Register<DMPInterruptByte, Reg::DMPIntStatus, i2c::helpers::RegAccess::Read>;
 
     using reg_motion_detect_status    = i2c::helpers::Register<MotionDetectionStatus, Reg::MotionDetectionStatus, i2c::helpers::RegAccess::Read>;
+    using reg_motion_detect_control   = i2c::helpers::Register<MotionDetectionControl, Reg::MotionDetectionControl, i2c::helpers::RegAccess::RW>;
 
     using reg_free_fall_threshold     = i2c::helpers::Register<uint8_t, Reg::FreeFallThreshold, i2c::helpers::RegAccess::RW>;
     using reg_free_fall_duration      = i2c::helpers::Register<uint8_t, Reg::FreeFallDuration, i2c::helpers::RegAccess::RW>;
@@ -449,6 +582,106 @@ struct tools::formatter_t<MPU6050::AllRaw>
     static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::AllRaw const& v)
     {
         return tools::format_to(std::forward<Dest>(dst), "AllR: {}; {}; TempR: {}" , v.accel, v.gyro, v.temp);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::MotionDetectionStatus>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::MotionDetectionStatus const& v)
+    {
+        const uint8_t *pS = (const uint8_t *)&v;
+        return tools::format_to(std::forward<Dest>(dst), "{:x}" , *pS);
+    }
+};
+
+template<>
+struct tools::formatter_t<MPU6050::InterruptByte>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::InterruptByte const& v)
+    {
+        const uint8_t *pS = (const uint8_t *)&v;
+        if (*pS == 0)
+            return tools::format_to(std::forward<Dest>(dst), "[Int: empty]");
+        using res_t = std::expected<size_t, FormatError>;
+        size_t res = 0;
+        return tools::format_to(std::forward<Dest>(dst), "[Int:")
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.dmp)
+                    return tools::format_to(std::forward<Dest>(dst), " DMP:{}", uint8_t(v.dmp));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.motion)
+                    return tools::format_to(std::forward<Dest>(dst), " M:{}", uint8_t(v.motion));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.pll_rdy)
+                    return tools::format_to(std::forward<Dest>(dst), " PLL:{}", uint8_t(v.pll_rdy));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.data_rdy)
+                    return tools::format_to(std::forward<Dest>(dst), " D:{}", uint8_t(v.data_rdy));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.free_fall)
+                    return tools::format_to(std::forward<Dest>(dst), " FF:{}", uint8_t(v.free_fall));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.i2c_mst_int)
+                    return tools::format_to(std::forward<Dest>(dst), " I2C_M:{}", uint8_t(v.i2c_mst_int));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.zero_motion)
+                    return tools::format_to(std::forward<Dest>(dst), " ZM:{}", uint8_t(v.zero_motion));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.fifo_overflow)
+                    return tools::format_to(std::forward<Dest>(dst), " FIFO_O:{}", uint8_t(v.fifo_overflow));
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                return tools::format_to(std::forward<Dest>(dst), "]");
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                return res;
+            });
     }
 };
 

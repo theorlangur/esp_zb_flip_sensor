@@ -3,45 +3,19 @@
 
 namespace dmp_internals
 {
+#include "mpu6050_dmp_key.h"
 #include "mpu6050_dmp.ixx"
 }
 
-struct orientation_t
-{
-    int8_t mtx[9] = {
-    };
+#define DMP_SAMPLE_RATE     (200)
+#define GYRO_SF             (46850825LL * 200 / DMP_SAMPLE_RATE)
 
-    constexpr uint16_t row_to_val(int row_idx) const
-    {
-        uint16_t res = 0;
-        if (int8_t b = mtx[row_idx*3 + 0]; b != 0)
-            res = 0 | ((b < 0) << 2);
-        else if (int8_t b = mtx[row_idx*3 + 1]; b != 0)
-            res = 1 | ((b < 0) << 2);
-        else if (int8_t b = mtx[row_idx*3 + 2]; b != 0)
-            res = 2 | ((b < 0) << 2);
-        else
-            res = 7;
-        return res;
-    }
-
-    constexpr uint16_t to_scalar() const
-    {
-        uint16_t res = 0;
-        res = row_to_val(0);
-        res |= row_to_val(1) << 3;
-        res |= row_to_val(2) << 6;
-        return res;
-    }
-};
-
-constexpr orientation_t g_xyz{
-.mtx={
-    1, 0, 0,
-    0, 1, 0,
-    0, 0, 1,
-}};
-uint16_t inv_orientation_matrix_to_scalar(const int8_t *mtx);
+//constexpr MPU6050::orientation_t g_xyz{
+//.mtx={
+//    1, 0, 0,
+//    0, 1, 0,
+//    0, 0, 1,
+//}};
 
 
 const char* MPU6050::err_to_str(ErrorCode e)
@@ -80,6 +54,17 @@ const char* MPU6050::err_to_str(ErrorCode e)
         case ErrorCode::GetAccelRaw: return "GetAccelRaw";
         case ErrorCode::GetGyro: return "GetGyro";
         case ErrorCode::GetGyroRaw: return "GetGyroRaw";
+        case ErrorCode::DMPSetOrientation: return "DMPSetOrientation";
+        case ErrorCode::ConfigInterrupts: return "ConfigInterrupts";
+        case ErrorCode::EnableInterrupts: return "EnableInterrupts";
+        case ErrorCode::GetEnableInterrupts: return "GetEnableInterrupts";
+        case ErrorCode::GetInterruptStatus: return "GetInterruptStatus";
+        case ErrorCode::SignalPathReset: return "SignalPathReset";
+        case ErrorCode::ConfigureMotionDetection: return "ConfigureMotionDetection";
+        case ErrorCode::ConfigureZeroMotionDetection: return "ConfigureZeroMotionDetection";
+        case ErrorCode::SetMotionControl: return "SetMotionControl";
+        case ErrorCode::GetMotionDetectionStatus: return "GetMotionDetectionStatus";
+        case ErrorCode::SetUserControl: return "SetUserControl";
     }
 }
 
@@ -377,6 +362,55 @@ MPU6050::ExpectedResult MPU6050::InitDMP()
                 .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::InitDMP}; });
 }
 
+MPU6050::ExpectedResult MPU6050::DMPSetOrientation(orientation_t::scalar_t orient)
+{
+    unsigned char gyro_regs[3], accel_regs[3];
+    const unsigned char gyro_axes[3] = {DINA4C, DINACD, DINA6C};
+    const unsigned char accel_axes[3] = {DINA0C, DINAC9, DINA2C};
+    const unsigned char gyro_sign[3] = {DINA36, DINA56, DINA76};
+    const unsigned char accel_sign[3] = {DINA26, DINA46, DINA66};
+
+    gyro_regs[0] = gyro_axes[orient & 3];
+    gyro_regs[1] = gyro_axes[(orient >> 3) & 3];
+    gyro_regs[2] = gyro_axes[(orient >> 6) & 3];
+    accel_regs[0] = accel_axes[orient & 3];
+    accel_regs[1] = accel_axes[(orient >> 3) & 3];
+    accel_regs[2] = accel_axes[(orient >> 6) & 3];
+
+    /* Chip-to-body, axes only. */
+    {
+        auto r = WriteMem(FCFG_1, 3, gyro_regs)
+                    .and_then([&](MPU6050 &d){ return WriteMem(FCFG_2, 3, accel_regs); });
+        if (!r)
+            return r;
+    }
+
+    memcpy(gyro_regs, gyro_sign, 3);
+    memcpy(accel_regs, accel_sign, 3);
+    if (orient & 4) {
+        gyro_regs[0] |= 1;
+        accel_regs[0] |= 1;
+    }
+    if (orient & 0x20) {
+        gyro_regs[1] |= 1;
+        accel_regs[1] |= 1;
+    }
+    if (orient & 0x100) {
+        gyro_regs[2] |= 1;
+        accel_regs[2] |= 1;
+    }
+
+    {
+        /* Chip-to-body, sign only. */
+        auto r = WriteMem(FCFG_3, 3, gyro_regs)
+                    .and_then([&](MPU6050 &d){ return WriteMem(FCFG_7, 3, accel_regs); });
+        if (!r)
+            return r;
+    }
+    //dmp.orient = orient;
+    return std::ref(*this);
+}
+
 MPU6050::ExpectedValue<MPU6050::AccelRaw> MPU6050::GetAccelRaw()
 {
     AccelRaw v;
@@ -425,4 +459,76 @@ MPU6050::ExpectedValue<MPU6050::AllMeasurements> MPU6050::GetAllMeasurements()
                     .temp = GetTempFromRaw(v.temp),
                     .gyro = {.x = GetGyroFromRaw(v.gyro.x), .y=GetGyroFromRaw(v.gyro.y), .z = GetGyroFromRaw(v.gyro.z)}};  
         });
+}
+
+MPU6050::ExpectedResult MPU6050::ConfigureInterrupts(MPU6050::InterruptPinCfg cfg)
+{
+    return reg_int_config{m_Device}.Write(cfg)
+                .transform([&]{ return std::ref(*this); })
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::ConfigInterrupts}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::InterruptByte> MPU6050::GetEnabledInterrupts()
+{
+    return reg_int_enable{m_Device}
+                .Read()
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::GetEnableInterrupts}; });
+}
+
+MPU6050::ExpectedResult MPU6050::EnableInterrupts(InterruptByte b)
+{
+    return reg_int_enable{m_Device}.Write(b)
+                .transform([&]{ return std::ref(*this); })
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::EnableInterrupts}; });
+}
+
+MPU6050::ExpectedResult MPU6050::SetUserCtrl(UserControl v)
+{
+    return reg_user_ctrl{m_Device}.Write(v)
+                .transform([&]{ return std::ref(*this); })
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::SetUserControl}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::InterruptByte> MPU6050::GetInterruptStatus()
+{
+    return reg_int_status{m_Device}
+                .Read()
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::GetInterruptStatus}; });
+}
+
+MPU6050::ExpectedValue<MPU6050::MotionDetectionStatus> MPU6050::GetMotionDetectionStatus()
+{
+    return reg_motion_detect_status{m_Device}
+                .Read()
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::GetMotionDetectionStatus}; });
+}
+
+MPU6050::ExpectedResult MPU6050::SignalPathReset(signal_path_t p)
+{
+    return reg_signal_path_reset{m_Device}
+                .Write(p)
+                .transform([&]{ 
+                        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                        return std::ref(*this); 
+                })
+                .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::SignalPathReset}; });
+}
+
+MPU6050::ExpectedResult MPU6050::ConfigureMotionDetection(uint8_t threshold, uint8_t duration, MotionDetectionControl ctrl)
+{
+    return reg_motion_threshold{m_Device}
+        .Write(threshold)
+        .and_then([&]{ return reg_motion_duration{m_Device}.Write(duration); })
+        .and_then([&]{ return reg_motion_detect_control{m_Device}.Write(ctrl); })
+        .transform([&]{ return std::ref(*this); })
+        .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::ConfigureMotionDetection}; });
+}
+
+MPU6050::ExpectedResult MPU6050::ConfigureZeroMotionDetection(uint8_t threshold, uint8_t duration)
+{
+    return reg_zero_motion_threshold{m_Device}
+        .Write(threshold)
+        .and_then([&]{ return reg_zero_motion_duration{m_Device}.Write(duration); })
+        .transform([&]{ return std::ref(*this); })
+        .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::ConfigureZeroMotionDetection}; });
 }
