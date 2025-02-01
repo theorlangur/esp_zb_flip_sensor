@@ -63,9 +63,9 @@ extern "C" void app_main(void)
 
     MPU6050 mpu6050 = *MPU6050::Open(bus);
     FMT_PRINTLN("MPU6050: Id={}", mpu6050.GetId());
-    mpu6050.SetPwrMgmt({.clksel = MPU6050::ClockSource::PLL_Gyro_X, .temp_dis = 0, .cycle = 0, .sleep = 0});
+    mpu6050.SetPwrMgmt({.clksel = MPU6050::ClockSource::PLL_Gyro_X, .temp_dis = 1, .cycle = 0, .sleep = 0});
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    mpu6050.SetPwrMgmt2({.stby_zg = 0, .stby_yg = 0, .stby_xg = 0});
+    mpu6050.SetPwrMgmt2({.stby_zg = 1, .stby_yg = 1, .stby_xg = 1, .stby_ya = 1, .stby_xa = 1});
     //FMT_PRINTLN("MPU6050: Initializing DMP");
     //mpu6050.SetUserCtrl({ .fifo_reset = true, .dmp_reset = true});
     //std::this_thread::sleep_for(std::chrono::milliseconds(100));
