@@ -43,6 +43,11 @@
             "command": "idf.py flash"
         },
         {
+            "label": "Flash & Monitor",
+            "type": "shell",
+            "command": "idf.py flash monitor"
+        },
+        {
             "label": "Erase Flash",
             "type": "shell",
             "command": "idf.py erase-flash"
@@ -58,7 +63,7 @@
             "options": {
                 "detached": true
             },
-            "command": "kill $(ps -faux | grep 'idf.py monitor' | head -1 | awk '{print $2}')"
+            "command": "kill $(ps -faux | grep -E 'idf\\.py (flash )?monitor' | head -1 | awk '{print $2}')"
         }
     ]
 }
