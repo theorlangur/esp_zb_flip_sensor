@@ -66,19 +66,19 @@ extern "C" void app_main(void)
     mpu6050.SetPwrMgmt({.clksel = MPU6050::ClockSource::PLL_Gyro_X, .temp_dis = 0, .cycle = 0, .sleep = 0});
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     mpu6050.SetPwrMgmt2({.stby_zg = 0, .stby_yg = 0, .stby_xg = 0});
-    FMT_PRINTLN("MPU6050: Initializing DMP");
-    mpu6050.SetUserCtrl({ .fifo_reset = true, .dmp_reset = true});
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    if (auto r = mpu6050.InitDMP(); !r)
-    {
-        FMT_PRINTLN("MPU6050 err InitDMP: {}", r.error());
-        return;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    mpu6050.SetUserCtrl({ .fifo_reset = true, .dmp_reset = true});
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    mpu6050.SetUserCtrl({ .fifo_enable = true, .dmp_enable = true});
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    //FMT_PRINTLN("MPU6050: Initializing DMP");
+    //mpu6050.SetUserCtrl({ .fifo_reset = true, .dmp_reset = true});
+    //std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    //if (auto r = mpu6050.InitDMP(); !r)
+    //{
+    //    FMT_PRINTLN("MPU6050 err InitDMP: {}", r.error());
+    //    return;
+    //}
+    //std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    //mpu6050.SetUserCtrl({ .fifo_reset = true, .dmp_reset = true});
+    //std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    //mpu6050.SetUserCtrl({ .fifo_enable = true, .dmp_enable = true});
+    //std::this_thread::sleep_for(std::chrono::milliseconds(50));
     auto xq = xQueueCreate(16, sizeof(uint8_t));
     gpio_config_t mpu6050_int_cfg = {
         .pin_bit_mask = 1ULL << 12,
@@ -95,17 +95,18 @@ extern "C" void app_main(void)
     gpio_isr_handler_add(gpio_num_t(12), mpu6050_int, &xq);
 
     mpu6050.SignalPathReset({});
+    mpu6050.SetAccelConfig(MPU6050::AccelFullScaleRange::_2_g, MPU6050::AccelFilter::_5Hz);
 
     mpu6050.ConfigureMotionDetection(
+            10, 
             20, 
-            40, 
             {
                 .motion_counter_decrement_rate = MPU6050::DecrementRate::_1, 
                 .free_fall_counter_decrement_rate = MPU6050::DecrementRate::_1, 
-                .accel_on_delay = 1
+                //.accel_on_delay = 1
             }
         );
-    mpu6050.ConfigureZeroMotionDetection(156, 0);
+    mpu6050.ConfigureZeroMotionDetection(56, 10);
 
     if (auto r = mpu6050.ConfigureInterrupts({.int_latch = 1}); !r)
     {

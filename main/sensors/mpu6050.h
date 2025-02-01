@@ -178,9 +178,14 @@ public:
         _8_g  = 2,
         _16_g = 3,
     };
+    enum class AccelFilter: uint8_t
+    {
+        _0 = 0,
+        _5Hz = 1
+    };
     struct AccelConfig
     {
-        uint8_t unused            : 3 = 0;
+        AccelFilter filter        : 3 = AccelFilter::_0;
         AccelFullScaleRange range : 2 = AccelFullScaleRange::_2_g;
         uint8_t x_self_test       : 1 = 0;
         uint8_t y_self_test       : 1 = 0;
@@ -363,7 +368,7 @@ public:
     ExpectedValue<PwrMgmt2> GetPwrMgmt2();
     ExpectedResult SetPwrMgmt2(PwrMgmt2 v);
 
-    ExpectedResult SetAccelRange(AccelFullScaleRange v);
+    ExpectedResult SetAccelConfig(AccelFullScaleRange r, AccelFilter filter);
     ExpectedResult SetGyroRange(GyroFullScaleRange v);
     AccelFullScaleRange GetAccelRange() const;
     GyroFullScaleRange GetGyroRange() const;
@@ -592,7 +597,77 @@ struct tools::formatter_t<MPU6050::MotionDetectionStatus>
     static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, MPU6050::MotionDetectionStatus const& v)
     {
         const uint8_t *pS = (const uint8_t *)&v;
-        return tools::format_to(std::forward<Dest>(dst), "{:x}" , *pS);
+        if (*pS == 0)
+            return tools::format_to(std::forward<Dest>(dst), "[Motion: none]");
+        using res_t = std::expected<size_t, FormatError>;
+        size_t res = 0;
+        return tools::format_to(std::forward<Dest>(dst), "[Motion:")
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.zero)
+                    return tools::format_to(std::forward<Dest>(dst), " ZM");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.x)
+                    return tools::format_to(std::forward<Dest>(dst), " X");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.x_neg)
+                    return tools::format_to(std::forward<Dest>(dst), " -X");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.y)
+                    return tools::format_to(std::forward<Dest>(dst), " Y");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.y_neg)
+                    return tools::format_to(std::forward<Dest>(dst), " -Y");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.z)
+                    return tools::format_to(std::forward<Dest>(dst), " Z");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                if (v.y_neg)
+                    return tools::format_to(std::forward<Dest>(dst), " -Z");
+                else
+                    return 0;
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                return tools::format_to(std::forward<Dest>(dst), "]");
+            })
+            .and_then([&](size_t s)->res_t
+            { 
+                res += s;
+                return res;
+            });
     }
 };
 

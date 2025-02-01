@@ -272,11 +272,11 @@ MPU6050::ExpectedResult MPU6050::SetPwrMgmt2(MPU6050::PwrMgmt2 v)
             .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::SetPwrMgmt2}; });
 }
 
-MPU6050::ExpectedResult MPU6050::SetAccelRange(AccelFullScaleRange v)
+MPU6050::ExpectedResult MPU6050::SetAccelConfig(AccelFullScaleRange r, AccelFilter f)
 {
     return reg_accel_cfg{m_Device}
-            .Write({.range = v})
-            .transform([&]{ m_State.accel_range = v; return std::ref(*this); })
+            .Write({.filter = f, .range = r})
+            .transform([&]{ m_State.accel_range = r; return std::ref(*this); })
             .transform_error([](::Err e){ return Err{.i2cErr = e, .code = ErrorCode::SetAccelRange}; });
 }
 
