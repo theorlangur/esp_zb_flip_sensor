@@ -114,7 +114,7 @@ extern "C" void app_main(void)
         return;
     }
 
-    if (auto r = mpu6050.EnableInterrupts({.dmp = 1, .zero_motion = 1, .motion = 1, .free_fall = 1}); !r)
+    if (auto r = mpu6050.EnableInterrupts({.zero_motion = 1, .motion = 1}); !r)
     {
         FMT_PRINTLN("MPU6050 err int en: {}", r.error());
         return;
