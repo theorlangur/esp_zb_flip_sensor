@@ -653,7 +653,7 @@ struct tools::formatter_t<MPU6050::MotionDetectionStatus>
             .and_then([&](size_t s)->res_t
             { 
                 res += s;
-                if (v.y_neg)
+                if (v.z_neg)
                     return tools::format_to(std::forward<Dest>(dst), " -Z");
                 else
                     return 0;
