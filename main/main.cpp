@@ -98,8 +98,8 @@ extern "C" void app_main(void)
     mpu6050.SetAccelConfig(MPU6050::AccelFullScaleRange::_2_g, MPU6050::AccelFilter::_5Hz);
 
     mpu6050.ConfigureMotionDetection(
+            5, 
             10, 
-            20, 
             {
                 .motion_counter_decrement_rate = MPU6050::DecrementRate::_1, 
                 .free_fall_counter_decrement_rate = MPU6050::DecrementRate::_1, 
@@ -127,13 +127,13 @@ extern "C" void app_main(void)
         {
             FMT_PRINTLN("MPU6050 Interrupt happened");
             //FMT_PRINTLN("MPU6050 Interrupt: {}", mpu6050.GetInterruptStatus());
+            FMT_PRINTLN("MPU6050 Interrupt: {}", mpu6050.GetInterruptStatus());
+            FMT_PRINTLN("MPU6050 Motion status: {}", mpu6050.GetMotionDetectionStatus());
+            {
+                FMT_PRINTLN("MPU6050: {}", mpu6050.GetAllMeasurements());
+            }
         }
 
-        FMT_PRINTLN("MPU6050 Interrupt: {}", mpu6050.GetInterruptStatus());
-        FMT_PRINTLN("MPU6050 Motion status: {}", mpu6050.GetMotionDetectionStatus());
-        {
-            FMT_PRINTLN("MPU6050: {}", mpu6050.GetAllMeasurements());
-        }
         //auto allR = *mpu6050.GetAllRaw();
         //FMT_PRINTLN("MPU6050(R): {}", allR);
         //std::this_thread::sleep_for(std::chrono::seconds(1));
